@@ -112,7 +112,7 @@ pipeline {
                         set -eux
 
                         cat > .env.production <<'EOF'
-VITE_API_BASE_URL=http://13.235.113.90
+VITE_API_BASE_URL=
 EOF
 
                         npm run build
