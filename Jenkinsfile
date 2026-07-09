@@ -42,40 +42,26 @@ pipeline {
             }
         }
 
-        stage('Backend Sync') {
+        stage('Backend CI') {
             steps {
                 dir('backend') {
                     sh '''
                         set -eux
+
+                        echo "===== SYNC DEPENDENCIES ====="
                         ${UV_BIN} sync --frozen
+
+                        echo "===== PYTHON VERSION ====="
                         ${UV_BIN} run python --version
-                    '''
-                }
-            }
-        }
 
-        stage('Backend Syntax Check') {
-            steps {
-                dir('backend') {
-                    sh '''
-                        set -eux
-
+                        echo "===== SYNTAX CHECK ====="
                         ${UV_BIN} run python -m py_compile \
                             main.py \
                             database.py \
                             models.py \
                             routers/users.py
-                    '''
-                }
-            }
-        }
 
-        stage('Backend Import Test') {
-            steps {
-                dir('backend') {
-                    sh '''
-                        set -eux
-
+                        echo "===== IMPORT TEST ====="
                         ${UV_BIN} run python -c \
                           "from main import app; print('FastAPI app import successful')"
                     '''
@@ -83,91 +69,69 @@ pipeline {
             }
         }
 
-        stage('Frontend Install') {
+        stage('Frontend CI') {
             steps {
                 dir('frontend') {
                     sh '''
                         set -eux
+
+                        echo "===== INSTALL DEPENDENCIES ====="
                         npm ci
-                    '''
-                }
-            }
-        }
 
-        stage('Frontend Lint') {
-            steps {
-                dir('frontend') {
-                    sh '''
-                        set -eux
+                        echo "===== LINT ====="
                         npm run lint
-                    '''
-                }
-            }
-        }
 
-        stage('Frontend Build') {
-            steps {
-                dir('frontend') {
-                    sh '''
-                        set -eux
-
+                        echo "===== CREATE PRODUCTION ENV ====="
                         cat > .env.production <<'EOF'
 VITE_API_BASE_URL=
 EOF
 
+                        echo "===== BUILD ====="
                         npm run build
+
+                        echo "===== VERIFY BUILD ====="
                         test -f dist/index.html
                     '''
                 }
             }
         }
 
-        stage('Deploy Frontend') {
-            steps {
-                dir('frontend') {
-                    sh '''
-                        set -eux
-
-                        sudo /usr/bin/rsync \
-                          -a \
-                          --delete \
-                          dist/ \
-                          ${DEPLOY_DIR}/
-                    '''
-                }
-            }
-        }
-
-        stage('Publish Backend') {
-            steps {
-                dir('backend') {
-                    sh '''
-                        set -eux
-
-                        /usr/bin/rsync \
-                          -a \
-                          --delete \
-                          --exclude '.venv' \
-                          ./ \
-                          ${BACKEND_DEPLOY_DIR}/
-
-                        cd ${BACKEND_DEPLOY_DIR}
-                        ${UV_BIN} sync --frozen
-                    '''
-                }
-            }
-        }
-
-        stage('Deploy Backend') {
+        stage('Deploy') {
             steps {
                 sh '''
                     set -eux
 
-                    sudo /usr/bin/systemctl restart ${BACKEND_SERVICE}
+                    echo "===== DEPLOY FRONTEND ====="
+
+                    sudo /usr/bin/rsync \
+                      -a \
+                      --delete \
+                      frontend/dist/ \
+                      ${DEPLOY_DIR}/
+
+                    echo "===== PUBLISH BACKEND ====="
+
+                    /usr/bin/rsync \
+                      -a \
+                      --delete \
+                      --exclude '.venv' \
+                      backend/ \
+                      ${BACKEND_DEPLOY_DIR}/
+
+                    echo "===== SYNC PRODUCTION BACKEND ====="
+
+                    cd ${BACKEND_DEPLOY_DIR}
+                    ${UV_BIN} sync --frozen
+
+                    echo "===== RESTART BACKEND ====="
+
+                    sudo /usr/bin/systemctl restart \
+                      ${BACKEND_SERVICE}
 
                     sleep 3
 
-                    sudo /usr/bin/systemctl is-active ${BACKEND_SERVICE}
+                    sudo /usr/bin/systemctl is-active \
+                      ${BACKEND_SERVICE}
                 '''
             }
         }
@@ -178,20 +142,32 @@ EOF
                     set -eux
 
                     echo "===== BACKEND HEALTH ====="
-                    curl --fail --silent --show-error \
+
+                    curl --fail \
+                      --silent \
+                      --show-error \
                       http://127.0.0.1:8000/health
+
                     echo
 
                     echo "===== USERS API THROUGH NGINX ====="
-                    curl --fail --silent --show-error \
+
+                    curl --fail \
+                      --silent \
+                      --show-error \
                       http://127.0.0.1/api/users/
+
                     echo
 
                     echo "===== FRONTEND THROUGH NGINX ====="
-                    curl --fail --silent --show-error \
-                      http://127.0.0.1/ > /dev/null
 
-                    echo "Frontend health check successful"
+                    curl --fail \
+                      --silent \
+                      --show-error \
+                      http://127.0.0.1/ \
+                      > /dev/null
+
+                    echo "All health checks successful"
                 '''
             }
         }
@@ -200,7 +176,7 @@ EOF
     post {
         success {
             echo 'CI/CD pipeline completed successfully.'
-            echo 'Application: http://13.235.113.90'
+            echo 'Application deployed successfully through Nginx.'
         }
 
         failure {
@@ -212,4 +188,3 @@ EOF
         }
     }
 }
-
