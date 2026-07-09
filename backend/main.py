@@ -3,79 +3,90 @@
 MAIN.PY - FastAPI Application Entry Point
 =============================================================================
 
-This is where your FastAPI application is created and configured.
-Think of it as the "front door" of your backend.
+FastAPI backend for the React User CRUD application.
 
-KEY CONCEPTS:
-1. FastAPI() creates the application instance
-2. Middleware handles cross-cutting concerns (like CORS)
-3. Routers organize endpoints into logical groups
+Development frontend:
+    http://localhost:5173
 
-PRODUCTION PATTERN:
-- Keep main.py minimal - just app setup and configuration
-- Business logic lives in routers/ and services/
-- This file should rarely change once set up
+EC2 frontend:
+    http://13.235.113.90:5173
 
-RUN THIS SERVER:
-    cd backend
-    uv run fastapi dev main.py
+Backend:
+    http://13.235.113.90:8000
 
-Then visit: http://localhost:8000/docs for interactive API documentation
+Swagger docs:
+    http://13.235.113.90:8000/docs
 =============================================================================
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from routers import users
 
-# -----------------------------------------------------------------------------
-# CREATE THE FASTAPI APPLICATION
-# -----------------------------------------------------------------------------
-# FastAPI() creates your app instance. All configuration hangs off this object.
-# In production, you might pass: title="My API", version="1.0.0", docs_url="/api/docs"
-app = FastAPI()
 
 # -----------------------------------------------------------------------------
-# CORS (Cross-Origin Resource Sharing) MIDDLEWARE
+# CREATE FASTAPI APPLICATION
 # -----------------------------------------------------------------------------
-# WHAT: CORS controls which websites can call your API from a browser
-# WHY:  Browsers block requests from different origins by default (security)
-#
-# Without this, your React app at localhost:5173 CANNOT call your API at localhost:8000
-# The browser will block it with: "CORS policy: No 'Access-Control-Allow-Origin' header"
-#
-# PRODUCTION NOTES:
-# - Never use allow_origins=["*"] in production (allows any website to call your API)
-# - List your actual frontend domains: ["https://myapp.com", "https://www.myapp.com"]
-# - allow_credentials=True is needed if you use cookies/auth headers
+
+app = FastAPI(
+    title="FastAPI React Full Stack API",
+    description="Backend API for React User CRUD application",
+    version="1.0.0",
+)
+
+
+# -----------------------------------------------------------------------------
+# CORS CONFIGURATION
+# -----------------------------------------------------------------------------
+
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8081",
+    "http://13.235.113.90:5173",
+]
+
+
 app.add_middleware(
     CORSMiddleware,
-    # ALLOWED ORIGINS: Which websites/apps can call this API from a browser
-    # Add your ngrok URL here when testing with mobile:
-    #   "https://your-ngrok-url.ngrok-free.app"
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server (React frontend)
-        "http://localhost:8081",  # Expo web (if you run expo start --web)
-    ],
-    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
-    allow_headers=["*"],  # Allow all headers (Content-Type, Authorization, etc.)
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
+
+# -----------------------------------------------------------------------------
+# ROOT ENDPOINT
+# -----------------------------------------------------------------------------
+
+@app.get("/")
+def root():
+    return {
+        "message": "FastAPI backend is running",
+        "status": "healthy",
+    }
+
+
+# -----------------------------------------------------------------------------
+# HEALTH CHECK ENDPOINT
+# -----------------------------------------------------------------------------
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "fastapi-react-full-stack-backend",
+    }
+
 
 # -----------------------------------------------------------------------------
 # REGISTER ROUTERS
 # -----------------------------------------------------------------------------
-# Routers group related endpoints together. This keeps main.py clean.
-#
-# include_router() mounts the router at a URL prefix:
-#   - prefix="/api/users" means all routes in users.router start with /api/users
-#   - tags=["users"] groups these endpoints together in /docs
-#
-# The users router defines:
-#   GET    /api/users       → list all users    (see routers/users.py)
-#   GET    /api/users/{id}  → get one user
-#   POST   /api/users       → create user
-#   PUT    /api/users/{id}  → update user
-#   DELETE /api/users/{id}  → delete user
-#
-# PATTERN: One router per "resource" (users, products, orders, etc.)
-app.include_router(users.router, prefix="/api/users", tags=["users"])
+
+app.include_router(
+    users.router,
+    prefix="/api/users",
+    tags=["users"],
+)
